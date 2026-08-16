@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Punto de entrada de mdr."""
 
 from __future__ import annotations
@@ -5,8 +6,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from mdr.help_text import help_for_terminal
-from mdr.session import run_session
+from help_text import help_for_terminal
+from session import run_session
 
 
 def main() -> None:

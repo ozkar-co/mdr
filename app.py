@@ -8,10 +8,10 @@ import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from mdr.help_text import HELP_LINES
-from mdr.links import Link, extract_links, resolve_href
-from mdr.render import RenderResult, render_markdown
-from mdr.search import find_matches
+from help_text import HELP_LINES
+from links import Link, extract_links, resolve_href
+from render import RenderResult, render_markdown
+from search import find_matches
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 ANSI_SGR = re.compile(r"\x1b\[([0-9;]*)m")

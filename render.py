@@ -9,7 +9,7 @@ from io import StringIO
 from rich.console import Console
 from rich.markdown import Markdown
 
-from mdr.links import Link
+from links import Link
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 

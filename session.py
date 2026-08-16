@@ -5,8 +5,8 @@ from __future__ import annotations
 import curses
 from pathlib import Path
 
-from mdr.app import MdrApp
-from mdr.browser import FileBrowser
+from app import MdrApp
+from browser import FileBrowser
 
 
 def run_session(start: Path | None = None, root: Path | None = None) -> None:

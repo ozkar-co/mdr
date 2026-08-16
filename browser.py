@@ -5,7 +5,7 @@ from __future__ import annotations
 import curses
 from pathlib import Path
 
-from mdr.files import find_markdown_files
+from files import find_markdown_files
 
 PAIR_SELECTED = 1
 PAIR_STATUS = 3

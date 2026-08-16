@@ -17,6 +17,8 @@ python3 -m venv .venv
 ./run.sh help
 ```
 
+También puedes ejecutar directamente: `.venv/bin/python main.py`
+
 ## Controles
 
 | Tecla | Acción |
