@@ -9,7 +9,7 @@ from io import StringIO
 from rich.console import Console
 from rich.markdown import Markdown
 
-from links import Link
+from links import Link, _normalize_markdown_links
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -33,6 +33,7 @@ class RenderResult:
 
 def render_markdown(content: str, source_links: list[Link], width: int) -> RenderResult:
     """Render markdown to ANSI-colored lines and locate links."""
+    content = _normalize_markdown_links(content)
     console = Console(
         file=StringIO(),
         force_terminal=True,

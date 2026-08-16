@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote
 
 from markdown_it import MarkdownIt
+
+LOCAL_LINK_SUFFIX = re.compile(
+    r"\[([^\]]+)\]\(([^)]+)\)([a-záéíóúñü]{1,3})(?=[\s,.;:!?\)'\"]|$)"
+)
+LOCAL_LINK_SPACES = re.compile(
+    r"\[([^\]]+)\]\(([^<>\)]+)\)"
+)
 
 
 def _parser() -> MarkdownIt:
@@ -23,8 +32,31 @@ class Link:
     source_line: int  # 1-based line in source file
 
 
+def _normalize_markdown_links(content: str) -> str:
+    """Fix common wiki link shapes that CommonMark would not parse."""
+    content = LOCAL_LINK_SUFFIX.sub(r"[\1\3](\2)", content)
+    content = LOCAL_LINK_SPACES.sub(
+        lambda match: (
+            f"[{match.group(1)}](<{match.group(2)}>)"
+            if " " in match.group(2)
+            and not match.group(2).startswith(("http://", "https://", "mailto:"))
+            else match.group(0)
+        ),
+        content,
+    )
+    return content
+
+
+def _normalize_href(href: str) -> str:
+    href = unquote(href.strip())
+    if href.startswith("<") and href.endswith(">"):
+        href = href[1:-1]
+    return href
+
+
 def extract_links(content: str) -> list[Link]:
     """Return inline links in document order."""
+    content = _normalize_markdown_links(content)
     tokens = _parser().parse(content)
     lines = content.splitlines()
     links: list[Link] = []
@@ -64,9 +96,28 @@ def _token_line(lines: list[str], token_map) -> int:
     return 1
 
 
+def _find_local_file(base_path: Path, href: str) -> Path | None:
+    name = Path(href).name
+    direct = (base_path.parent / href).resolve()
+    if direct.exists():
+        return direct
+
+    if not name.lower().endswith(".md"):
+        md_name = f"{name}.md"
+        md_direct = (base_path.parent / md_name).resolve()
+        if md_direct.exists():
+            return md_direct
+        name = md_name
+
+    for candidate in base_path.parent.iterdir():
+        if candidate.is_file() and candidate.name.lower() == name.lower():
+            return candidate.resolve()
+    return None
+
+
 def resolve_href(href: str, base_path: Path) -> Path | str | None:
     """Resolve href to a local path, external URL, or in-document anchor."""
-    href = href.strip()
+    href = _normalize_href(href)
     if not href:
         return None
 
@@ -79,13 +130,8 @@ def resolve_href(href: str, base_path: Path) -> Path | str | None:
     if href.startswith("file://"):
         return Path(href[7:])
 
-    target = (base_path.parent / href).resolve()
-    if target.exists():
-        return target
+    found = _find_local_file(base_path, href)
+    if found is not None:
+        return found
 
-    # Allow links without extension to .md files
-    md_target = target.with_suffix(".md")
-    if md_target.exists():
-        return md_target
-
-    return target
+    return (base_path.parent / href).resolve()
