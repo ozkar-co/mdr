@@ -12,6 +12,14 @@ from rich.markdown import Markdown
 from links import Link, _normalize_markdown_links
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+TERMINAL_CONTROL = re.compile(
+    r"\x1b\[[0-9;]*m"      # colores/estilos SGR
+    r"|\x1b\]8;[^\\]*\\"   # hipervínculos OSC 8 (Rich)
+)
+
+
+def strip_terminal_controls(text: str) -> str:
+    return TERMINAL_CONTROL.sub("", text)
 
 
 @dataclass
@@ -44,7 +52,7 @@ def render_markdown(content: str, source_links: list[Link], width: int) -> Rende
     console.print(Markdown(content, code_theme="monokai"))
     raw = console.file.getvalue()
     lines = raw.splitlines()
-    plain_lines = [ANSI_ESCAPE.sub("", line) for line in lines]
+    plain_lines = [strip_terminal_controls(line) for line in lines]
     rendered_links = _locate_links(plain_lines, source_links)
     return RenderResult(
         lines=lines,

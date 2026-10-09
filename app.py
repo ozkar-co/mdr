@@ -10,10 +10,9 @@ from pathlib import Path
 
 from help_text import HELP_LINES
 from links import Link, extract_links, resolve_href
-from render import RenderResult, render_markdown
+from render import RenderResult, render_markdown, strip_terminal_controls, TERMINAL_CONTROL
 from search import find_matches
 
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 ANSI_SGR = re.compile(r"\x1b\[([0-9;]*)m")
 
 PAIR_LINK = 1
@@ -82,9 +81,13 @@ class MdrApp:
                 self._scroll_to_anchor(self.current.anchor)
                 self.current.anchor = None
             self._clamp_link_index()
-            self._ensure_link_visible()
             if self.search_query:
                 self._refresh_search_hits()
+
+        height, _ = self.stdscr.getmaxyx()
+        view_height = max(height - 2, 1)
+        max_scroll = max(0, len(self.current.render.lines) - view_height)
+        self.current.scroll = max(0, min(self.current.scroll, max_scroll))
 
     def _refresh_search_hits(self) -> None:
         if not self.current.render or not self.search_query:
@@ -124,6 +127,7 @@ class MdrApp:
 
     def _draw(self, height: int, width: int) -> None:
         self.stdscr.erase()
+        self.stdscr.attrset(curses.A_NORMAL)
         render = self.current.render
         assert render is not None
 
@@ -191,7 +195,7 @@ class MdrApp:
                 pass
             return
 
-        plain_len = len(ANSI_ESCAPE.sub("", text))
+        plain_len = len(strip_terminal_controls(text))
         cursor = 0
         cx = x
 
@@ -200,7 +204,7 @@ class MdrApp:
                 segment = text[_ansi_slice(text, cursor) : _ansi_slice(text, hl.start)]
                 cx = _addstr_ansi(self.stdscr, y, cx, segment, max_width - (cx - x)) or cx
             segment = text[_ansi_slice(text, hl.start) : _ansi_slice(text, hl.end)]
-            plain_seg = ANSI_ESCAPE.sub("", segment)
+            plain_seg = strip_terminal_controls(segment)
             remaining = max_width - (cx - x)
             if remaining <= 0:
                 return
@@ -209,8 +213,10 @@ class MdrApp:
                 if hl.bold:
                     attr |= curses.A_BOLD
                 self.stdscr.attron(attr)
-                self.stdscr.addstr(y, cx, plain_seg[:remaining])
-                self.stdscr.attroff(attr)
+                try:
+                    self.stdscr.addstr(y, cx, plain_seg[:remaining])
+                finally:
+                    self.stdscr.attroff(attr)
             except curses.error:
                 pass
             cx += min(len(plain_seg), remaining)
@@ -242,8 +248,10 @@ class MdrApp:
 
         try:
             self.stdscr.attron(curses.color_pair(PAIR_STATUS))
-            self.stdscr.addstr(height - 1, 0, status.ljust(width - 1)[: width - 1])
-            self.stdscr.attroff(curses.color_pair(PAIR_STATUS))
+            try:
+                self.stdscr.addstr(height - 1, 0, status.ljust(width - 1)[: width - 1])
+            finally:
+                self.stdscr.attroff(curses.color_pair(PAIR_STATUS))
         except curses.error:
             pass
 
@@ -430,6 +438,18 @@ class MdrApp:
         elif link.line >= self.current.scroll + view_height:
             self.current.scroll = link.line - view_height + 1
 
+    def _run_outside_curses(self, action) -> None:
+        """Ejecuta algo que toma control del terminal (navegador, xdg-open)."""
+        curses.def_prog_mode()
+        curses.endwin()
+        try:
+            action()
+        finally:
+            curses.reset_prog_mode()
+            curses.curs_set(1 if self.mode == "search_input" else 0)
+            self.stdscr.clear()
+            self.current.render = None
+
     def _follow_link(self) -> None:
         if not self.current.render or not self.current.render.links:
             return
@@ -447,7 +467,7 @@ class MdrApp:
 
         if isinstance(resolved, str):
             try:
-                webbrowser.open(resolved)
+                self._run_outside_curses(lambda: webbrowser.open(resolved))
                 self.message = f"Abierto: {resolved}"
             except OSError:
                 self.message = "No se pudo abrir el enlace"
@@ -467,7 +487,9 @@ class MdrApp:
         try:
             import subprocess
 
-            subprocess.run(["xdg-open", str(resolved)], check=False)
+            self._run_outside_curses(
+                lambda: subprocess.run(["xdg-open", str(resolved)], check=False)
+            )
             self.message = f"Abierto: {resolved.name}"
         except OSError:
             self.message = "No se pudo abrir el archivo"
@@ -516,7 +538,7 @@ def _ansi_slice(text: str, plain_index: int) -> int:
     plain_count = 0
     i = 0
     while i < len(text) and plain_count < plain_index:
-        match = ANSI_ESCAPE.match(text, i)
+        match = TERMINAL_CONTROL.match(text, i)
         if match:
             i = match.end()
             continue
@@ -535,19 +557,24 @@ def _addstr_ansi(win, y: int, x: int, text: str, max_width: int) -> int:
     plain_len = 0
 
     while i < len(text) and plain_len < max_width:
-        esc = ANSI_ESCAPE.match(text, i)
-        if esc:
-            attrs = _sgr_to_attr(esc.group(0), attrs)
-            i = esc.end()
+        control = TERMINAL_CONTROL.match(text, i)
+        if control:
+            sgr = ANSI_SGR.match(text, i)
+            if sgr:
+                attrs = _sgr_to_attr(control.group(0), attrs)
+            i = control.end()
             continue
 
         ch = text[i]
         i += 1
         try:
             win.attron(attrs)
-            win.addstr(y, col, ch)
-            win.attroff(attrs)
+            try:
+                win.addstr(y, col, ch)
+            finally:
+                win.attroff(attrs)
         except curses.error:
+            win.attrset(curses.A_NORMAL)
             return col + 1
         col += 1
         plain_len += 1

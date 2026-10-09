@@ -12,8 +12,9 @@ python3 -m venv .venv
 ## Uso
 
 ```bash
-./run.sh              # selector de archivos .md
-./run.sh ejemplo.md   # abrir directamente
+./run.sh                              # selector en el directorio actual
+./run.sh ~/dev/wiki/data/articles     # selector de artículos wiki
+./run.sh ejemplo.md                   # abrir directamente
 ./run.sh help
 ```
 

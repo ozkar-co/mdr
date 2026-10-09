@@ -3,8 +3,9 @@
 HELP_LINES = [
     "mdr — lector de Markdown en terminal",
     "",
-    "Uso:  ./run.sh                  lista de archivos .md",
-    "      ./run.sh <archivo.md>     abrir directamente",
+    "Uso:  ./run.sh                         lista de archivos .md",
+    "      ./run.sh <directorio>            lista de archivos .md en ese directorio",
+    "      ./run.sh <archivo.md>            abrir directamente",
     "      ./run.sh help",
     "",
     "Selector de archivos",
